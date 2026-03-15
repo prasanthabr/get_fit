@@ -9,7 +9,8 @@
 </head>
 <body>
   <div id="app">
-    <div class="top-bar">
+
+    <header class="top-bar">
       <div id="person-switcher"></div>
       <div class="filters">
         <button data-range="7d">7d</button>
@@ -17,49 +18,89 @@
         <button data-range="90d">90d</button>
         <button data-range="all" class="active">all</button>
       </div>
-    </div>
+    </header>
 
     <div id="stats" class="stats-grid"></div>
-
-    <div class="section-label">w</div>
-    <div class="chart-container">
-      <canvas id="weightChart"></canvas>
+    <div id="progress-wrap" class="progress-wrap">
+      <div id="progress-fill" class="progress-fill"></div>
     </div>
 
-    <div class="section-label">wc</div>
-    <div class="chart-container chart-sm">
-      <canvas id="waistChart"></canvas>
-    </div>
+    <section class="chart-section">
+      <div class="section-header">body</div>
+      <div class="chart-row split-3-1">
+        <div class="chart-box">
+          <div class="chart-label">w</div>
+          <div class="chart-container">
+            <canvas id="weightChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-label">wc</div>
+          <div class="chart-container chart-sm">
+            <canvas id="waistChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="section-label">p</div>
-    <div class="chart-container">
-      <canvas id="proteinChart"></canvas>
-    </div>
+    <section class="chart-section">
+      <div class="section-header">nutrition</div>
+      <div class="chart-row split-2">
+        <div class="chart-box">
+          <div class="chart-label">p</div>
+          <div class="chart-container">
+            <canvas id="proteinChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-label">h2o</div>
+          <div class="chart-container">
+            <canvas id="waterChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="section-label">h2o</div>
-    <div class="chart-container chart-sm">
-      <canvas id="waterChart"></canvas>
-    </div>
+    <section class="chart-section">
+      <div class="section-header">clinical</div>
+      <div class="chart-row split-2">
+        <div class="chart-box">
+          <div class="chart-label">bp</div>
+          <div class="chart-container">
+            <canvas id="bpChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-label">chol</div>
+          <div class="chart-container">
+            <canvas id="cholChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="section-label">bp</div>
-    <div class="chart-container chart-sm">
-      <canvas id="bpChart"></canvas>
-    </div>
+    <section class="chart-section">
+      <div class="section-header">activity</div>
+      <div class="chart-row split-2">
+        <div class="chart-box">
+          <div class="chart-label">x</div>
+          <div class="chart-container">
+            <canvas id="exerciseChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-label">gout</div>
+          <div class="chart-container">
+            <canvas id="goutChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="section-label">chol</div>
-    <div class="chart-container chart-sm">
-      <canvas id="cholChart"></canvas>
-    </div>
+  </div>
 
-    <div class="section-label">gout</div>
-    <div class="chart-container chart-sm">
-      <canvas id="goutChart"></canvas>
-    </div>
-
-    <div class="section-label">x</div>
-    <div class="chart-container chart-sm">
-      <canvas id="exerciseChart"></canvas>
-    </div>
+  <div id="loading" class="loading-overlay">
+    <div class="loading-dot"></div>
   </div>
 
   <script src="app.js"></script>

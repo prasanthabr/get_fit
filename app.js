@@ -1,6 +1,6 @@
 // --- Config ---
 
-const CONFIG_SHEET_ID = '1V5jV8JJCa1xIS0cz2atRZOHz1eI_Z9tDfTDWyEX438g'; // ← replace with your master config sheet ID
+const CONFIG_SHEET_ID = '1V5jV8JJCa1xIS0cz2atRZOHz1eI_Z9tDfTDWyEX438g';
 
 function sheetUrl(sheetId, tab) {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${tab}`;
@@ -9,6 +9,84 @@ function sheetUrl(sheetId, tab) {
 let people = [];
 let activePerson = null;
 let currentRange = 'all';
+
+// --- Chart.js global defaults ---
+
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+Chart.defaults.font.size = 11;
+Chart.defaults.color = '#555';
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyleWidth = 7;
+Chart.defaults.plugins.legend.labels.boxHeight = 7;
+Chart.defaults.plugins.tooltip.backgroundColor = '#18191c';
+Chart.defaults.plugins.tooltip.borderColor = '#2a2b2e';
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.titleColor = '#dcdcdc';
+Chart.defaults.plugins.tooltip.bodyColor = '#888';
+Chart.defaults.plugins.tooltip.titleFont = { size: 11, weight: '500' };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 11 };
+Chart.defaults.plugins.tooltip.displayColors = true;
+Chart.defaults.plugins.tooltip.colorDecorators = false;
+
+// --- Palette ---
+
+const C = {
+  bg:      '#0a0a0a',
+  surface: '#111214',
+  grid:    '#1c1d20',
+  tick:    '#444',
+  muted:   '#555',
+  red:     '#e94560',
+  blue:    '#4a9eff',
+  green:   '#3ecf8e',
+  yellow:  '#f5c842',
+};
+
+// --- Gradient helper ---
+
+function gradient(canvas, hex, opacityTop = 0.18, opacityBot = 0) {
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 240);
+  g.addColorStop(0, hex + Math.round(opacityTop * 255).toString(16).padStart(2, '0'));
+  g.addColorStop(1, hex + Math.round(opacityBot * 255).toString(16).padStart(2, '0'));
+  return g;
+}
+
+// --- Shared scale config ---
+
+function scales(overrides = {}) {
+  return {
+    x: {
+      ticks: { color: C.tick, maxTicksLimit: 8, font: { size: 10 } },
+      grid: { color: C.grid },
+      border: { color: 'transparent' },
+    },
+    y: {
+      ticks: { color: C.tick, font: { size: 10 } },
+      grid: { color: C.grid },
+      border: { color: 'transparent' },
+    },
+    ...overrides,
+  };
+}
+
+function baseOpts(overrides = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 400, easing: 'easeOutQuart' },
+    plugins: {
+      legend: {
+        labels: { color: C.muted, font: { size: 10 }, padding: 14 },
+        ...(overrides.legend || {}),
+      },
+      ...(overrides.plugins || {}),
+    },
+    scales: scales(overrides.scales || {}),
+    layout: { padding: { top: 4, right: 4 } },
+  };
+}
 
 // --- CSV ---
 
@@ -37,9 +115,7 @@ async function loadCSV(url) {
     const res = await fetch(url);
     if (!res.ok) return [];
     return parseCSV(await res.text());
-  } catch (e) {
-    return [];
-  }
+  } catch { return []; }
 }
 
 // --- Filtering ---
@@ -82,7 +158,7 @@ function renderPersonSwitcher(people) {
   });
 }
 
-// --- Chart helpers ---
+// --- Charts ---
 
 const charts = {};
 
@@ -90,68 +166,74 @@ function destroyChart(id) {
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
 }
 
-function rollingAverage(values, window) {
+function rollingAverage(values, w) {
   return values.map((_, i) => {
-    const slice = values.slice(Math.max(0, i - window + 1), i + 1);
+    const slice = values.slice(Math.max(0, i - w + 1), i + 1);
     return slice.reduce((a, b) => a + b, 0) / slice.length;
   });
 }
 
-const GRID   = '#1e1e1e';
-const TICK   = '#555';
-const MUTED  = '#666';
-const RED    = '#e94560';
-const BLUE   = '#4a9eff';
-const GREEN  = '#4caf82';
-const YELLOW = '#f0c040';
-
-function baseOptions(extra = {}) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: { duration: 300 },
-    plugins: {
-      legend: { labels: { color: MUTED, font: { size: 11 }, boxWidth: 12 } },
-      ...(extra.plugins || {}),
-    },
-    scales: {
-      x: { ticks: { color: TICK, maxTicksLimit: 10, font: { size: 10 } }, grid: { color: GRID } },
-      y: { ticks: { color: TICK, font: { size: 10 } }, grid: { color: GRID } },
-      ...(extra.scales || {}),
-    },
-  };
+function empty(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  canvas.parentElement.innerHTML = '<div class="no-data">—</div>';
 }
 
 // --- Stats ---
 
 function renderStats(weightData, person) {
   const container = document.getElementById('stats');
-  if (!weightData.length) { container.innerHTML = ''; return; }
+  const progressFill = document.getElementById('progress-fill');
+
+  if (!weightData.length) {
+    container.innerHTML = '';
+    progressFill.style.width = '0%';
+    return;
+  }
 
   const sorted  = [...weightData].sort((a, b) => a.date.localeCompare(b.date));
   const start   = parseFloat(sorted[0].wt);
   const current = parseFloat(sorted[sorted.length - 1].wt);
   const lost    = start - current;
   const toGo    = current - person.gw;
-  const pct     = Math.max(0, (start - current) / (start - person.gw) * 100);
+  const pct     = Math.max(0, Math.min(100, (start - current) / (start - person.gw) * 100));
 
   let eta = '—';
   if (sorted.length >= 3 && lost > 0) {
-    const daysSoFar = (new Date(sorted[sorted.length - 1].date) - new Date(sorted[0].date)) / 86400000;
-    if (daysSoFar > 0) {
-      const daysLeft = toGo / (lost / daysSoFar);
+    const span = (new Date(sorted[sorted.length - 1].date) - new Date(sorted[0].date)) / 86400000;
+    if (span > 0) {
+      const daysLeft = toGo / (lost / span);
       eta = new Date(Date.now() + daysLeft * 86400000)
         .toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' });
     }
   }
 
+  const deltaClass = lost > 0 ? 'accent-green' : lost < 0 ? 'accent-red' : '';
+  const deltaSign  = lost > 0 ? '↓' : lost < 0 ? '↑' : '';
+
   container.innerHTML = `
-    <div class="stat-card"><div class="value highlight">${current.toFixed(1)}</div><div class="label">now</div></div>
-    <div class="stat-card"><div class="value">${lost >= 0 ? '-' : '+'}${Math.abs(lost).toFixed(1)}</div><div class="label">Δ</div></div>
-    <div class="stat-card"><div class="value">${toGo.toFixed(1)}</div><div class="label">left</div></div>
-    <div class="stat-card"><div class="value">${pct.toFixed(0)}%</div><div class="label">done</div></div>
-    <div class="stat-card"><div class="value">${eta}</div><div class="label">eta</div></div>
+    <div class="stat-card accent-red">
+      <div class="value highlight">${current.toFixed(1)}</div>
+      <div class="label">now</div>
+    </div>
+    <div class="stat-card ${deltaClass}">
+      <div class="value">${deltaSign} ${Math.abs(lost).toFixed(1)}</div>
+      <div class="label">lost</div>
+    </div>
+    <div class="stat-card">
+      <div class="value">${toGo.toFixed(1)}</div>
+      <div class="label">to go</div>
+    </div>
+    <div class="stat-card accent-blue">
+      <div class="value">${pct.toFixed(0)}%</div>
+      <div class="label">done</div>
+    </div>
+    <div class="stat-card">
+      <div class="value">${eta}</div>
+      <div class="label">eta</div>
+    </div>
   `;
+
+  progressFill.style.width = `${pct}%`;
 }
 
 // --- Weight ---
@@ -159,23 +241,51 @@ function renderStats(weightData, person) {
 function renderWeightChart(data, person) {
   const canvas = document.getElementById('weightChart');
   destroyChart('weight');
-  if (!data.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!data.length) { empty('weightChart'); return; }
 
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
   const labels = sorted.map(d => d.date);
   const values = sorted.map(d => parseFloat(d.wt));
+  const avg7   = rollingAverage(values, 7);
 
   charts.weight = new Chart(canvas, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: 'daily',  data: values, borderColor: RED,  backgroundColor: 'rgba(233,69,96,0.08)', borderWidth: 1.5, pointRadius: 2, tension: 0.1 },
-        { label: '7d avg', data: rollingAverage(values, 7), borderColor: BLUE, borderWidth: 2, pointRadius: 0, tension: 0.3 },
-        { label: 'target', data: values.map(() => person.gw), borderColor: '#333', borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'daily',
+          data: values,
+          borderColor: C.red,
+          backgroundColor: gradient(canvas, C.red, 0.12),
+          fill: true,
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.2,
+        },
+        {
+          label: '7d avg',
+          data: avg7,
+          borderColor: C.blue,
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3,
+        },
+        {
+          label: 'target',
+          data: values.map(() => person.gw),
+          borderColor: C.grid,
+          borderWidth: 1,
+          borderDash: [4, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions(),
+    options: baseOpts(),
   });
 }
 
@@ -185,7 +295,7 @@ function renderWaistChart(data, person) {
   const canvas = document.getElementById('waistChart');
   destroyChart('waist');
   const rows = data.filter(d => d.wc && d.wc !== '').sort((a, b) => a.date.localeCompare(b.date));
-  if (!rows.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!rows.length) { empty('waistChart'); return; }
 
   const labels = rows.map(d => d.date);
   const values = rows.map(d => parseFloat(d.wc));
@@ -195,11 +305,30 @@ function renderWaistChart(data, person) {
     data: {
       labels,
       datasets: [
-        { label: 'wc',     data: values, borderColor: YELLOW, backgroundColor: 'rgba(240,192,64,0.08)', borderWidth: 2, pointRadius: 3, tension: 0.2 },
-        { label: 'target', data: values.map(() => person.gwc), borderColor: '#333', borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'wc',
+          data: values,
+          borderColor: C.yellow,
+          backgroundColor: gradient(canvas, C.yellow, 0.1),
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: C.yellow,
+          tension: 0.2,
+        },
+        {
+          label: 'target',
+          data: values.map(() => person.gwc),
+          borderColor: C.grid,
+          borderWidth: 1,
+          borderDash: [4, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions(),
+    options: baseOpts(),
   });
 }
 
@@ -208,7 +337,7 @@ function renderWaistChart(data, person) {
 function renderProteinChart(data, person) {
   const canvas = document.getElementById('proteinChart');
   destroyChart('protein');
-  if (!data.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!data.length) { empty('proteinChart'); return; }
 
   const byDate = {};
   data.forEach(row => {
@@ -224,11 +353,28 @@ function renderProteinChart(data, person) {
     data: {
       labels: dates,
       datasets: [
-        { label: 'p', data: values, backgroundColor: values.map(v => v >= person.gp ? 'rgba(74,158,255,0.7)' : 'rgba(233,69,96,0.5)'), borderRadius: 3 },
-        { label: 'target', data: values.map(() => person.gp), type: 'line', borderColor: BLUE, borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'protein',
+          data: values,
+          backgroundColor: values.map(v => v >= person.gp
+            ? 'rgba(74,158,255,0.65)'
+            : 'rgba(233,69,96,0.5)'),
+          borderRadius: 3,
+          borderSkipped: false,
+        },
+        {
+          label: 'target',
+          data: values.map(() => person.gp),
+          type: 'line',
+          borderColor: C.blue,
+          borderWidth: 1.5,
+          borderDash: [4, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions({ scales: { y: { ticks: { color: TICK }, grid: { color: GRID }, beginAtZero: true } } }),
+    options: baseOpts({ scales: { y: { beginAtZero: true } } }),
   });
 }
 
@@ -237,7 +383,7 @@ function renderProteinChart(data, person) {
 function renderWaterChart(data) {
   const canvas = document.getElementById('waterChart');
   destroyChart('water');
-  if (!data.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!data.length) { empty('waterChart'); return; }
 
   const byDate = {};
   data.forEach(row => {
@@ -254,11 +400,28 @@ function renderWaterChart(data) {
     data: {
       labels: dates,
       datasets: [
-        { label: 'h2o', data: values, backgroundColor: values.map(v => v >= target ? 'rgba(76,175,130,0.7)' : 'rgba(233,69,96,0.5)'), borderRadius: 3 },
-        { label: 'target', data: values.map(() => target), type: 'line', borderColor: GREEN, borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'water',
+          data: values,
+          backgroundColor: values.map(v => v >= target
+            ? 'rgba(62,207,142,0.65)'
+            : 'rgba(233,69,96,0.5)'),
+          borderRadius: 3,
+          borderSkipped: false,
+        },
+        {
+          label: 'target',
+          data: values.map(() => target),
+          type: 'line',
+          borderColor: C.green,
+          borderWidth: 1.5,
+          borderDash: [4, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions({ scales: { y: { ticks: { color: TICK }, grid: { color: GRID }, beginAtZero: true } } }),
+    options: baseOpts({ scales: { y: { beginAtZero: true } } }),
   });
 }
 
@@ -268,7 +431,7 @@ function renderBPChart(data) {
   const canvas = document.getElementById('bpChart');
   destroyChart('bp');
   const rows = data.filter(d => d.sys && d.sys !== '').sort((a, b) => a.date.localeCompare(b.date));
-  if (!rows.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!rows.length) { empty('bpChart'); return; }
 
   const labels = rows.map(d => d.date);
   const sys    = rows.map(d => parseFloat(d.sys));
@@ -279,13 +442,51 @@ function renderBPChart(data) {
     data: {
       labels,
       datasets: [
-        { label: 'sys', data: sys, borderColor: RED,    backgroundColor: 'rgba(233,69,96,0.08)',  borderWidth: 2, pointRadius: 3, tension: 0.2 },
-        { label: 'dia', data: dia, borderColor: YELLOW, backgroundColor: 'rgba(240,192,64,0.08)', borderWidth: 2, pointRadius: 3, tension: 0.2 },
-        { label: 'sys ok', data: sys.map(() => 120), borderColor: 'rgba(233,69,96,0.25)',  borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
-        { label: 'dia ok', data: dia.map(() => 80),  borderColor: 'rgba(240,192,64,0.25)', borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'sys',
+          data: sys,
+          borderColor: C.red,
+          backgroundColor: gradient(canvas, C.red, 0.08),
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: C.red,
+          tension: 0.3,
+        },
+        {
+          label: 'dia',
+          data: dia,
+          borderColor: C.yellow,
+          backgroundColor: gradient(canvas, C.yellow, 0.06),
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: C.yellow,
+          tension: 0.3,
+        },
+        {
+          label: '120',
+          data: sys.map(() => 120),
+          borderColor: 'rgba(233,69,96,0.2)',
+          borderWidth: 1,
+          borderDash: [3, 5],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: '80',
+          data: dia.map(() => 80),
+          borderColor: 'rgba(245,200,66,0.2)',
+          borderWidth: 1,
+          borderDash: [3, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions(),
+    options: baseOpts(),
   });
 }
 
@@ -295,7 +496,7 @@ function renderCholesterolChart(data) {
   const canvas = document.getElementById('cholChart');
   destroyChart('chol');
   const rows = data.filter(d => d.hdl && d.hdl !== '').sort((a, b) => a.date.localeCompare(b.date));
-  if (!rows.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!rows.length) { empty('cholChart'); return; }
 
   const labels = rows.map(d => d.date);
   const hdl    = rows.map(d => parseFloat(d.hdl));
@@ -306,13 +507,51 @@ function renderCholesterolChart(data) {
     data: {
       labels,
       datasets: [
-        { label: 'hdl', data: hdl, borderColor: GREEN, backgroundColor: 'rgba(76,175,130,0.08)', borderWidth: 2, pointRadius: 3, tension: 0.2 },
-        { label: 'ldl', data: ldl, borderColor: RED,   backgroundColor: 'rgba(233,69,96,0.08)',  borderWidth: 2, pointRadius: 3, tension: 0.2 },
-        { label: 'hdl target', data: hdl.map(() => 1.0), borderColor: 'rgba(76,175,130,0.3)',  borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
-        { label: 'ldl target', data: ldl.map(() => 2.6), borderColor: 'rgba(233,69,96,0.3)', borderWidth: 1, borderDash: [4, 4], pointRadius: 0 },
+        {
+          label: 'hdl',
+          data: hdl,
+          borderColor: C.green,
+          backgroundColor: gradient(canvas, C.green, 0.1),
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: C.green,
+          tension: 0.3,
+        },
+        {
+          label: 'ldl',
+          data: ldl,
+          borderColor: C.red,
+          backgroundColor: gradient(canvas, C.red, 0.08),
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: C.red,
+          tension: 0.3,
+        },
+        {
+          label: 'hdl ok',
+          data: hdl.map(() => 1.0),
+          borderColor: 'rgba(62,207,142,0.2)',
+          borderWidth: 1,
+          borderDash: [3, 5],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: 'ldl ok',
+          data: ldl.map(() => 2.6),
+          borderColor: 'rgba(233,69,96,0.2)',
+          borderWidth: 1,
+          borderDash: [3, 5],
+          pointRadius: 0,
+          fill: false,
+        },
       ],
     },
-    options: baseOptions(),
+    options: baseOpts(),
   });
 }
 
@@ -322,7 +561,7 @@ function renderGoutChart(data) {
   const canvas = document.getElementById('goutChart');
   destroyChart('gout');
   const rows = [...data].sort((a, b) => a.date.localeCompare(b.date));
-  if (!rows.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!rows.length) { empty('goutChart'); return; }
 
   const labels   = rows.map(d => d.date);
   const severity = rows.map(d => parseFloat(d.severity) || 0);
@@ -334,11 +573,19 @@ function renderGoutChart(data) {
       datasets: [{
         label: 'severity',
         data: severity,
-        backgroundColor: severity.map(v => v >= 7 ? 'rgba(233,69,96,0.85)' : v >= 4 ? 'rgba(240,192,64,0.75)' : 'rgba(74,158,255,0.65)'),
+        backgroundColor: severity.map(v =>
+          v >= 7 ? 'rgba(233,69,96,0.85)' :
+          v >= 4 ? 'rgba(245,200,66,0.75)' :
+                   'rgba(74,158,255,0.6)'),
         borderRadius: 3,
+        borderSkipped: false,
       }],
     },
-    options: baseOptions({ scales: { y: { ticks: { color: TICK, stepSize: 1 }, grid: { color: GRID }, beginAtZero: true, max: 10 } } }),
+    options: baseOpts({
+      scales: {
+        y: { beginAtZero: true, max: 10, ticks: { stepSize: 2 } },
+      },
+    }),
   });
 }
 
@@ -347,35 +594,48 @@ function renderGoutChart(data) {
 function renderExerciseChart(data) {
   const canvas = document.getElementById('exerciseChart');
   destroyChart('exercise');
-  if (!data.length) { canvas.parentElement.innerHTML = '<div class="no-data">—</div>'; return; }
+  if (!data.length) { empty('exerciseChart'); return; }
 
   const byWeek = {};
   data.forEach(row => {
-    const d    = new Date(row.date);
-    const day  = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const key  = new Date(new Date(row.date).setDate(diff)).toISOString().slice(0, 10);
+    const d   = new Date(row.date);
+    const day = d.getDay();
+    const key = new Date(new Date(row.date).setDate(d.getDate() - day + (day === 0 ? -6 : 1)))
+      .toISOString().slice(0, 10);
     if (!byWeek[key]) byWeek[key] = { ss: 0, other: 0 };
-    if (row.type && row.type.toLowerCase().includes('s&s')) byWeek[key].ss++;
+    if (row.type?.toLowerCase().includes('s&s')) byWeek[key].ss++;
     else if (row.type && row.type.toLowerCase() !== 'rest') byWeek[key].other++;
   });
 
   const weeks  = Object.keys(byWeek).sort();
-  const labels = weeks.map(w => new Date(w).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }));
+  const labels = weeks.map(w =>
+    new Date(w).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }));
 
   charts.exercise = new Chart(canvas, {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        { label: 'a1', data: weeks.map(w => byWeek[w].ss),    backgroundColor: 'rgba(233,69,96,0.7)',  borderRadius: 3 },
-        { label: 'a2', data: weeks.map(w => byWeek[w].other), backgroundColor: 'rgba(74,158,255,0.6)', borderRadius: 3 },
+        {
+          label: 's&s',
+          data: weeks.map(w => byWeek[w].ss),
+          backgroundColor: 'rgba(233,69,96,0.75)',
+          borderRadius: 3,
+          borderSkipped: false,
+        },
+        {
+          label: 'other',
+          data: weeks.map(w => byWeek[w].other),
+          backgroundColor: 'rgba(74,158,255,0.65)',
+          borderRadius: 3,
+          borderSkipped: false,
+        },
       ],
     },
-    options: baseOptions({
+    options: baseOpts({
       scales: {
-        x: { stacked: true, ticks: { color: TICK }, grid: { color: GRID } },
-        y: { stacked: true, ticks: { color: TICK, stepSize: 1 }, grid: { color: GRID }, beginAtZero: true },
+        x: { stacked: true },
+        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
       },
     }),
   });
@@ -383,8 +643,13 @@ function renderExerciseChart(data) {
 
 // --- Load ---
 
+function setLoading(on) {
+  document.getElementById('loading').classList.toggle('visible', on);
+}
+
 async function loadAll() {
   const person = people.find(p => p.key === activePerson);
+  setLoading(true);
 
   const [wRaw, fRaw, xRaw, vRaw, gRaw] = await Promise.all([
     loadCSV(sheetUrl(person.sid, 'w')),
@@ -409,6 +674,8 @@ async function loadAll() {
   renderCholesterolChart(v);
   renderGoutChart(g);
   renderExerciseChart(x);
+
+  setLoading(false);
 }
 
 // --- Init ---
@@ -427,7 +694,7 @@ function bindFilters() {
 async function init() {
   people = await loadMasterConfig();
   if (!people.length) {
-    document.getElementById('app').innerHTML = '<p class="no-data">config not found</p>';
+    document.getElementById('app').innerHTML = '<p class="no-data">—</p>';
     return;
   }
   activePerson = people[0].key;
