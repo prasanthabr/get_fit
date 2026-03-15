@@ -58,7 +58,7 @@ function gradient(canvas, hex, opacityTop = 0.18, opacityBot = 0) {
 function scales(overrides = {}) {
   return {
     x: {
-      ticks: { color: C.tick, maxTicksLimit: 8, font: { size: 10 } },
+      ticks: { color: C.tick, maxTicksLimit: window.innerWidth < 500 ? 5 : 8, font: { size: 10 } },
       grid: { color: C.grid },
       border: { color: 'transparent' },
     },

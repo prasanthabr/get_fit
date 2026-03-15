@@ -334,19 +334,77 @@ body {
   animation: pulse 1s ease-in-out infinite;
 }
 
-/* --- Mobile --- */
+/* --- Touch targets (all screen sizes) --- */
+
+#person-switcher button,
+.filters button {
+  min-height: 36px;
+}
+
+/* --- Tablet (narrow desktop) --- */
+
+@media (max-width: 900px) {
+  body { max-width: 100%; }
+}
+
+/* --- Mobile landscape / large phone --- */
 
 @media (max-width: 700px) {
   body { padding: 0.9rem 0.75rem 2rem; }
 
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
-  .stats-grid .stat-card:nth-child(5),
-  .stats-grid .stat-card:nth-child(6) { display: none; }
+  /* Stack top bar vertically */
+  .top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
 
+  /* Filters span full width */
+  .filters {
+    justify-content: space-between;
+  }
+
+  .filters button { flex: 1; }
+
+  /* Show all 6 stat cards in 3×2 grid */
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+
+  /* Charts stack */
   .chart-row.split-2,
   .chart-row.split-3-1 { grid-template-columns: 1fr; }
 
-  .chart-container { height: 200px; }
+  .chart-container     { height: 190px; }
   .chart-container.chart-sm { height: 160px; }
+
   .stat-card .value { font-size: 1.2rem; }
+
+  /* Hide milestone sub-labels to keep pills compact */
+  .ms-sub { display: none; }
+
+  .milestones-strip { gap: 0.35rem; }
+
+  .milestone { padding: 0.3rem 0.6rem; font-size: 0.65rem; }
+}
+
+/* --- Small phone (iPhone SE, 375px) --- */
+
+@media (max-width: 400px) {
+  body { padding: 0.75rem 0.6rem 2rem; }
+
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Keep the 4 most important cards, hide eta + streak */
+  .stats-grid .stat-card:nth-child(5),
+  .stats-grid .stat-card:nth-child(6) { display: none; }
+
+  .stat-card .value   { font-size: 1.1rem; }
+  .stat-card .label   { font-size: 0.55rem; }
+
+  .chart-container    { height: 170px; }
+  .chart-container.chart-sm { height: 140px; }
+
+  .section-header { font-size: 0.55rem; }
+
+  .milestone { padding: 0.25rem 0.5rem; font-size: 0.6rem; }
+  .ms-emoji  { font-size: 0.8rem; }
 }
