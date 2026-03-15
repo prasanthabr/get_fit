@@ -178,15 +178,80 @@ function empty(canvasId) {
   canvas.parentElement.innerHTML = '<div class="no-data">—</div>';
 }
 
+// --- Milestones ---
+
+const MILESTONES = [
+  { pct: 5,   emoji: '🌱', label: '5%',   desc: 'first steps' },
+  { pct: 10,  emoji: '🔥', label: '10%',  desc: 'blood sugar improving' },
+  { pct: 25,  emoji: '💪', label: '25%',  desc: 'a quarter done' },
+  { pct: 50,  emoji: '⚡', label: '50%',  desc: 'halfway' },
+  { pct: 75,  emoji: '🎯', label: '75%',  desc: 'nearly there' },
+  { pct: 100, emoji: '🏆', label: 'goal', desc: 'done!' },
+];
+
+const MOTIVATION = [
+  { min: 0,   max: 5,   msg: (kg) => `${kg.toFixed(1)} kg down. Every day adds up — keep logging.` },
+  { min: 5,   max: 10,  msg: () => `🌱 5% done. Momentum is building.` },
+  { min: 10,  max: 25,  msg: () => `🔥 10% down. Your insulin sensitivity is already improving.` },
+  { min: 25,  max: 50,  msg: () => `💪 A quarter of the way there. You're doing this.` },
+  { min: 50,  max: 75,  msg: () => `⚡ Halfway. This is remarkable.` },
+  { min: 75,  max: 100, msg: () => `🎯 Three quarters done. The finish line is in sight.` },
+  { min: 100, max: Infinity, msg: () => `🏆 Goal weight reached. Incredible work.` },
+];
+
+function calcStreak(weightData) {
+  if (!weightData.length) return 0;
+  const dates = [...new Set(weightData.map(d => d.date))].sort().reverse();
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let expected = today;
+
+  for (const ds of dates) {
+    const d = new Date(ds);
+    d.setHours(0, 0, 0, 0);
+    const diff = Math.round((expected - d) / 86400000);
+    if (diff <= 1) {
+      streak++;
+      expected = new Date(d);
+      expected.setDate(expected.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function renderMilestones(pct) {
+  const strip = document.getElementById('milestones');
+  let nextFound = false;
+
+  strip.innerHTML = MILESTONES.map(m => {
+    const earned = pct >= m.pct;
+    const isNext = !earned && !nextFound;
+    if (isNext) nextFound = true;
+    const cls = earned ? 'earned' : isNext ? 'next' : 'locked';
+    return `
+      <div class="milestone ${cls}">
+        <span class="ms-emoji">${m.emoji}</span>
+        <span class="ms-label">${m.label}</span>
+        <span class="ms-sub">${earned ? '✓' : isNext ? '← next' : m.desc}</span>
+      </div>`;
+  }).join('');
+}
+
 // --- Stats ---
 
 function renderStats(weightData, person) {
-  const container = document.getElementById('stats');
+  const container    = document.getElementById('stats');
   const progressFill = document.getElementById('progress-fill');
+  const motivEl      = document.getElementById('motivation');
 
   if (!weightData.length) {
     container.innerHTML = '';
+    motivEl.textContent = '';
     progressFill.style.width = '0%';
+    renderMilestones(0);
     return;
   }
 
@@ -196,6 +261,7 @@ function renderStats(weightData, person) {
   const lost    = start - current;
   const toGo    = current - person.gw;
   const pct     = Math.max(0, Math.min(100, (start - current) / (start - person.gw) * 100));
+  const streak  = calcStreak(weightData);
 
   let eta = '—';
   if (sorted.length >= 3 && lost > 0) {
@@ -209,6 +275,7 @@ function renderStats(weightData, person) {
 
   const deltaClass = lost > 0 ? 'accent-green' : lost < 0 ? 'accent-red' : '';
   const deltaSign  = lost > 0 ? '↓' : lost < 0 ? '↑' : '';
+  const streakEmoji = streak >= 7 ? '🔥' : streak >= 3 ? '✨' : '📅';
 
   container.innerHTML = `
     <div class="stat-card accent-red">
@@ -216,7 +283,7 @@ function renderStats(weightData, person) {
       <div class="label">now</div>
     </div>
     <div class="stat-card ${deltaClass}">
-      <div class="value">${deltaSign} ${Math.abs(lost).toFixed(1)}</div>
+      <div class="value">${deltaSign}&thinsp;${Math.abs(lost).toFixed(1)}</div>
       <div class="label">lost</div>
     </div>
     <div class="stat-card">
@@ -231,9 +298,17 @@ function renderStats(weightData, person) {
       <div class="value">${eta}</div>
       <div class="label">eta</div>
     </div>
+    <div class="stat-card accent-yellow">
+      <div class="value">${streakEmoji} ${streak}</div>
+      <div class="label">streak</div>
+    </div>
   `;
 
   progressFill.style.width = `${pct}%`;
+  renderMilestones(pct);
+
+  const motivLine = MOTIVATION.find(m => pct >= m.min && pct < m.max);
+  motivEl.textContent = motivLine ? motivLine.msg(lost) : '';
 }
 
 // --- Weight ---
