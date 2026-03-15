@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>log</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div class="top-bar">
+      <div id="person-switcher"></div>
+      <div class="filters">
+        <button data-range="7d">7d</button>
+        <button data-range="30d">30d</button>
+        <button data-range="90d">90d</button>
+        <button data-range="all" class="active">all</button>
+      </div>
+    </div>
+
+    <div id="stats" class="stats-grid"></div>
+
+    <div class="section-label">w</div>
+    <div class="chart-container">
+      <canvas id="weightChart"></canvas>
+    </div>
+
+    <div class="section-label">wc</div>
+    <div class="chart-container chart-sm">
+      <canvas id="waistChart"></canvas>
+    </div>
+
+    <div class="section-label">p</div>
+    <div class="chart-container">
+      <canvas id="proteinChart"></canvas>
+    </div>
+
+    <div class="section-label">h2o</div>
+    <div class="chart-container chart-sm">
+      <canvas id="waterChart"></canvas>
+    </div>
+
+    <div class="section-label">bp</div>
+    <div class="chart-container chart-sm">
+      <canvas id="bpChart"></canvas>
+    </div>
+
+    <div class="section-label">chol</div>
+    <div class="chart-container chart-sm">
+      <canvas id="cholChart"></canvas>
+    </div>
+
+    <div class="section-label">gout</div>
+    <div class="chart-container chart-sm">
+      <canvas id="goutChart"></canvas>
+    </div>
+
+    <div class="section-label">x</div>
+    <div class="chart-container chart-sm">
+      <canvas id="exerciseChart"></canvas>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
