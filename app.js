@@ -15,7 +15,7 @@ let currentRange = 'all';
 function parseCSV(text) {
   const lines = text.trim().split('\n');
   if (lines.length < 1) return [];
-  const headers = lines[0].split(',').map(h => h.trim());
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
   return lines.slice(1).filter(l => l.trim()).map(line => {
     const values = [];
     let current = '';
